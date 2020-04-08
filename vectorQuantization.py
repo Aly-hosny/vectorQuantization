@@ -48,10 +48,10 @@ class vectorQuant:
             import matplotlib.pyplot as plt
             plt.ion()
             fig, ax = plt.subplots()
-            ax.scatter(reshapedframesTrain[:,0],reshapedframesTrain[:,1])
-            sp = ax.scatter(self.codeBook[:,0],self.codeBook[:,1])
+            ax.scatter(reshapedframesTrain[:,0][::10],reshapedframesTrain[:,1][::10] ,color='cyan', label='Audio frames')
+            sp = ax.scatter(self.codeBook[:,0],self.codeBook[:,1],color='b', label='CodeBook for quantization')
             plt.draw()
-
+            plt.legend()
         while teps>self.eps:
             diffToCB =  reshapedframesTrain - np.rot90(ml.repmat(self.codeBook,reshapedframesTrain.shape[0],1).reshape(-1,self.dim[0],self.dim[1]),axes=(1,0)) # subtract each audio frames from all the entries of the codeBook
             ind = np.argmin(np.sqrt(np.einsum('ijk,ijk->ij', diffToCB, diffToCB)) , axis=0) # get the index of the codebook entry with minumy distance to each audio frame
