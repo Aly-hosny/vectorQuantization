@@ -20,9 +20,11 @@ eps = 1e-2 # threshold to exist the iteration process for codebook generartion
 
 myObj = vectorQuant(trainFile,eps,dim) # create object with input paramters
 
-myObj.createModel(livePlot=False) # create a codebook moedel based on the object properties, if the second dimension of the codebook is 2, a live plot can be enabled to see the progress, the default is False.
+codeBook = myObj.createModel(livePlot=False) # create a codebook moedel based on the object properties, if the second dimension of the codebook is 2, a live plot can be enabled to see the progress, the default is False.
 
-myObj.applyVectorQ(self,wavFile,binFile=outBin , wavFile=outWav) # apply the created model to quantize audio file, outBin and outWav are optional if output binary and wav files are needed, the binary files include the indices of the audio, the codebook, and the sampling rate.
+outputDecoded = myObj.applyVectorQ(self,wavFile) # apply the created model to quantize audio file, and return the dequantized value.
+saveBin(self,binFile) # save the indices of the audio, the codebook, and the sampling rate into a binary file
+saveWav(self,binFile) # save the dequantizd values into wav file for playback
 
 
 ```

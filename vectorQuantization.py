@@ -3,7 +3,6 @@ import numpy.matlib as ml
 import wave
 import struct
 import pickle
-# from sound import *
 
 
 class vectorQuant:
@@ -21,14 +20,15 @@ class vectorQuant:
         '''
         self.trainFile = wave.open(trainFile, 'r') 
         self.samplingRateTrain = self.trainFile.getframerate() # get sampling rate
-        self.nChannels = self.trainFile.getnchannels() # get number of channels
+        self.nChannelsTrain = self.trainFile.getnchannels() # get number of channels
         self.nFramesTrain = self.trainFile.getnframes() # get number of frames in the audio file
-        self.width = self.trainFile.getsampwidth()
+        self.widthTrain = self.trainFile.getsampwidth()
         data=self.trainFile.readframes(self.nFramesTrain) # temp storage for frames
-        self.framesTrain =  np.array(struct.unpack('h' *(self.nFramesTrain*self.width) ,data)).reshape(-1,self.nChannels) # get the audio frames
+        self.framesTrain =  np.array(struct.unpack('h' *(self.nFramesTrain*self.widthTrain) ,data)).reshape(-1,self.nChannelsTrain) # get the audio frames
         self.dim = dim
         self.eps = eps
-
+        self._cbCreated = False
+        self._quantized = False
 
 
     def createModel(self,livePlot=False):
@@ -40,9 +40,7 @@ class vectorQuant:
 
 
         self.codeBook = np.random.uniform(np.amin(reshapedframesTrain), np.amax(reshapedframesTrain), size=(self.dim)) # random initialization for codebook
-        # cbIdx = np.argsort(np.sum(iniCodeBook**2,axis=1))
-        # self.codeBook = iniCodeBook[cbIdx]
-        # dist = np.zeros([np.shape(reshapedframesTrain)[0],np.shape(self.codeBook)[0]]) #empty array to store distance between each vector and all elements in codebook
+
         teps = 1e10
         if livePlot and self.dim[1] == 2: # if live plotting is enabeled prepare the figure
             import matplotlib.pyplot as plt
@@ -66,26 +64,27 @@ class vectorQuant:
                 sp.set_offsets(self.codeBook)
                 fig.canvas.draw_idle()
                 plt.pause(0.0001)
+        self._cbCreated = True
 
+        return self.codeBook
 
-    def applyVectorQ(self,audioFile,binFile=None , wavFile=None):
+    def applyVectorQ(self,audioFile):
         '''
         quantize audio file based on the trained model "codeBook"
         audioFile: audio file to be quantized
-        binFile: if set to a binary file name, the sampling rate, codeBook, and quantized indices are writen to a binary file
-        wavFile: if set to a wav file name, the decoded frames are writen to a wav file 
         '''
+        if not self._cbCreated:
+            raise RuntimeError("code book must be created using createModel() method first")
+
         audioFile = wave.open(audioFile, 'r') 
         self.samplingRate = audioFile.getframerate() # get the samplingRate of input audio file
-        nChannels = audioFile.getnchannels() # get number of channels
-        width = audioFile.getsampwidth()
+        self.nChannels = audioFile.getnchannels() # get number of channels
+        self.width = audioFile.getsampwidth()
         nFrames = audioFile.getnframes() # get frames count
         data=audioFile.readframes(nFrames) # temp storage for frames
-        frames =  np.array(struct.unpack('h' *(nFrames*width) ,data)).reshape(-1,nChannels) # get the audio frames
+        frames =  np.array(struct.unpack('h' *(nFrames*self.width) ,data)).reshape(-1,self.nChannels) # get the audio frames
             
         reshapedFrames = frames[:int(len(frames.flat)/self.dim[1])*self.dim[1]].reshape(-1,self.dim[1])/np.amax(frames) #reshape frames based on the desired codebook shape
-
-        # dist2 = np.zeros([nFrames,self.dim[0]])
 
         diffToCB =  reshapedFrames - np.rot90(ml.repmat(self.codeBook,reshapedFrames.shape[0],1).reshape(-1,self.dim[0],self.dim[1]),axes=(1,0)) # subtract each audio frames from all the entries of the codeBook
         self.ind = np.argmin(np.sqrt(np.einsum('ijk,ijk->ij', diffToCB, diffToCB)) , axis=0) # get the index of the codebook entry with minmum distance to each audio frame
@@ -94,19 +93,30 @@ class vectorQuant:
         else:
             self.ind = self.ind.astype(np.uint16)
         self.outputDecoded=self.codeBook[self.ind].reshape(frames.shape) * np.amax(frames) # restore the quatized and coded frames
-        if binFile: # save indices, sampling rate, and codebook to binary file
-            bFile = open(binFile, 'wb')
-            binData = (self.samplingRate , self.codeBook , self.ind)
-            pickle.dump(binData,bFile ) 
-            bFile.close()
-        if wavFile: # save decoded frames to wav file
-            snd = self.outputDecoded.flatten().astype(int)
-            length=len(snd)
-            
-            wf = wave.open(wavFile, 'wb')
-            wf.setnchannels(nChannels)
-            wf.setsampwidth(width)
-            wf.setframerate(self.samplingRate)
-            data=struct.pack( 'h' * length, *snd )
-            wf.writeframes(data)
-            wf.close()
+        self._quantized = True
+        
+        return self.outputDecoded
+
+    def saveBin(self,binFile):
+        if not self._quantized:
+            raise RuntimeError("quantizer must be apploed first")
+
+        bFile = open(binFile, 'wb')
+        binData = (self.samplingRate , self.codeBook , self.ind)
+        pickle.dump(binData,bFile ) 
+        bFile.close()
+
+    def saveWav(self,wavFile):
+        if not self._quantized:
+            raise RuntimeError("quantizer must be apploed first")
+
+        snd = self.outputDecoded.flatten().astype(int)
+        length=len(snd)
+        
+        wf = wave.open(wavFile, 'wb')
+        wf.setnchannels(self.nChannels)
+        wf.setsampwidth(self.width)
+        wf.setframerate(self.samplingRate)
+        data=struct.pack( 'h' * length, *snd )
+        wf.writeframes(data)
+        wf.close()
